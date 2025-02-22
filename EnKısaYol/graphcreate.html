@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Düğümler ve Bağlantılar</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-draw/dist/leaflet.draw.css" />
+  <style>
+    #map {
+      height: 600px;
+      width: 100%;
+    }
+    #saveButton {
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+
+  ,
+  <h1>Düğümler ve Bağlantılar</h1>  
+  <div id="map"></div>
+
+  <!-- Kaydet Butonu -->
+  <button id="saveButton">Kaydet</button>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-draw/dist/leaflet.draw.js"></script>
+  
+  <script>
+    const map = L.map('map').setView([38.67644607554451, 34.74274992942811], 16); // Başlangıç: Kayseri, Türkiye
+
+    // OpenStreetMap katmanını ekleyelim
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    // Düğümleri ve yolları saklamak için arrays
+    let nodes = [];  // Düğümler
+    let paths = [];  // Bağlantılar
+    let nodeCount = 1; // Düğüm sayacı, her düğüm için benzersiz bir isim verir
+
+    // Düğüm yerleştirme
+    map.on('click', function(e) {
+      const latlng = e.latlng;
+
+      // Otomatik isim verme (Düğüm 1, Düğüm 2, ...)
+      const nodeName = `Düğüm ${nodeCount++}`;
+
+      // Düğüm ekleyelim
+      const marker = L.marker(latlng).addTo(map)
+        .bindPopup(nodeName)
+        .openPopup();
+
+      // Düğümü nodes array'ine ekle
+      nodes.push({ latlng: latlng, marker: marker, name: nodeName });
+
+      // Düğüm üzerinde tıklanırsa, bir bağlantı başlatalım
+      marker.on('click', function() {
+        if (paths.length && paths[paths.length - 1].length === 1) {
+          // Eğer bir bağlantı noktası seçilmişse, bu noktayı yeni düğüme bağlayalım
+          const lastNode = paths[paths.length - 1][0];
+          const path = [lastNode, latlng];
+          paths[paths.length - 1] = path; // Son yolu güncelle
+          const polyline = L.polyline(path, { color: 'blue', weight: 5 }).addTo(map);
+          paths.push([]); // Yeni bağlantı başlatmak için boş bir array ekle
+
+          // Sağ tıklama ile yol silme
+          polyline.on('contextmenu', function() {
+            map.removeLayer(polyline);
+            paths = paths.filter(function(p) {
+              return p !== path;
+            });
+            alert('Yol silindi.');
+          });
+        } else {
+          // Bağlantı başlatmak için bu düğümü seç
+          paths.push([latlng]); // Yeni yol başlangıcı
+        }
+      });
+
+      // Düğümü silme işlevi ekleyelim
+      marker.on('contextmenu', function() {
+        // Sağ tıklama ile düğümü sil
+        map.removeLayer(marker);
+        nodes = nodes.filter(function(node) {
+          return node.marker !== marker;
+        });
+      });
+    });
+
+    // Kaydet butonuna tıklama olayı
+    document.getElementById('saveButton').addEventListener('click', function() {
+      // Düğümleri istenen formata dönüştürelim
+      const nodeData = nodes.map(node => {
+        return {
+          name: node.name,
+          coordinates: [node.latlng.lat, node.latlng.lng] // Latitude ve Longitude sırası
+        };
+      });
+
+      // Rotaları istenen formata dönüştürelim
+      const routeData = paths
+        .filter(path => path.length === 2) // Sadece tamamlanmış yollar
+        .map(path => {
+          return [
+            [path[0].lat, path[0].lng], // Başlangıç noktası (lat, lng)
+            [path[1].lat, path[1].lng]  // Bitiş noktası (lat, lng)
+          ];
+        });
+
+      // JSON olarak çıktı oluşturalım
+      const jsonData = `
+nodes = ${JSON.stringify(nodeData, null, 4)};
+
+routes = ${JSON.stringify(routeData, null, 4)};
+`;
+
+      // Veriyi bir dosya olarak kaydetmek için
+      const blob = new Blob([jsonData], { type: 'text/plain' }); // JSON formatında düz metin
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'baglantilar_ve_dugumler.py'; // Python dosya uzantısı
+      a.click();
+      URL.revokeObjectURL(url); // URL'yi serbest bırak
+    });
+  </script>
+</body>
+</html>
